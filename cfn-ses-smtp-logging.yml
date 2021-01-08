@@ -1,0 +1,82 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ses-smtp-logging
+  Send all SES events to CloudWatch
+Resources:
+  SesEventsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: 'SNS SMTP log'
+      TopicName: 'sns-smtp-log'
+      Subscription:
+        - Protocol: lambda
+          Endpoint: !GetAtt SnsToCloudwatch.Arn
+
+  SnsToCloudwatch:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: nodejs12.x
+      Role: !GetAtt SnsToCloudwatchRole.Arn
+      Handler: index.handler
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log("I was called from SNS, here is the event:", JSON.stringify(event, undefined, 2));
+          };
+      Description: Print out input event so CloudWatch can pick it up and log it
+
+  SnsToCloudwatchInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref SnsToCloudwatch
+      Principal: sns.amazonaws.com
+
+  SesEventsTopicPolicy:
+    Type: 'AWS::SNS::TopicPolicy'
+    Properties:
+      Topics:
+        - !Ref SesEventsTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 'sns:Publish'
+            Resource: !Ref SesEventsTopic
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnLike:
+                AWS:SourceArn: !Sub 'arn:aws:*:*:${AWS::AccountId}:*'
+
+  SnsToCloudwatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+
+      Path: "/"
+      Policies:
+        - PolicyName: "WriteToCloudwatchPolicy"
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'logs:DescribeLogStreams'
+                # TODO: This is too permissive,
+                # you should restrict access only to where your lambda function needs to write to
+                Resource:
+                  - 'arn:aws:logs:*:*:*'
