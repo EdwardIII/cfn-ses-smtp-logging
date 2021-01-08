@@ -2,7 +2,7 @@
 
 If you're used to running any kind of mail service, you will
 know there are times when you have to figure out whether
-an email was delivered somewhere or not. Typically when receipents say
+an email was delivered somewhere or not. Typically when recipients say
 they aren't getting emails and you need to identify if the problem is their end or yours.
 
 ## CloudFormation template
